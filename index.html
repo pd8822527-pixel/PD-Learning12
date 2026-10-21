@@ -1,0 +1,226 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>PD Learning Hub</title>
+<!--
+FREE SETUP (Firebase Spark plan, no Storage needed):
+1. Firebase console > Authentication > enable Email/Password. Add ONE user = your admin email + password.
+2. Firestore Database > create (production mode) > Rules tab > paste the rules below (replace ADMIN_EMAIL).
+3. Project settings > Your apps > Web app > copy config into firebaseConfig below. Set ADMIN_EMAIL below too.
+4. Upload this file as index.html to a GitHub repo, enable Pages, paste the Pages link into WebIntoApp.
+5. PDFs/photos: upload to Google Drive (share "Anyone with the link") or Cloudinary, paste the link in Admin > Content.
+
+rules_version='2';service cloud.firestore{match /databases/{d}/documents{
+ function admin(){return request.auth!=null&&request.auth.token.email=="ADMIN_EMAIL"}
+ match /users/{u}{allow read,delete:if admin()||request.auth.uid==u;allow create:if request.auth.uid==u;
+  allow update:if admin()||(request.auth.uid==u&&request.resource.data.status==resource.data.status)}
+ match /content/{c}{allow read:if request.auth!=null;allow write:if admin()}
+ match /notices/{c}{allow read:if request.auth!=null;allow write:if admin()}
+ match /ads/{c}{allow read:if request.auth!=null;allow write:if admin()}
+ match /chats/{u}{allow read,write:if admin()||request.auth.uid==u;
+ match /msgs/{m}{allow read,write:if admin()||request.auth.uid==u}}
+ match /quizzes/{c}{allow read:if request.auth!=null;allow write:if admin()}
+ match /results/{c}{allow read:if admin()||resource.data.uid==request.auth.uid;allow create:if request.resource.data.uid==request.auth.uid;allow delete:if admin()}
+ match /polls/{c}{allow read:if request.auth!=null;allow write:if admin()}
+ match /votes/{v}{allow read:if request.auth!=null;allow create:if v==request.resource.data.pollId+"_"+request.auth.uid;allow delete:if admin()}}}}
+-->
+<style>
+:root{--ink:#1b2250;--pri:#27337f;--acc:#f2a33a;--bg:#f5f6fb;--ok:#14a39a;--bad:#d64545;--mut:#6b7392}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.45 system-ui,"Noto Sans","Noto Sans Bengali",sans-serif;padding-bottom:70px}
+header{position:sticky;top:0;z-index:5;background:var(--pri);color:#fff;display:flex;align-items:center;gap:8px;padding:12px 14px}
+header b{flex:1;font-size:18px}header button{background:none;border:0;color:#fff;font-size:20px}
+main{padding:14px;max-width:640px;margin:auto}
+button{font:inherit;border:0;border-radius:10px;padding:8px 12px;background:var(--pri);color:#fff;margin:2px}
+button.alt{background:var(--acc);color:var(--ink)}button.bad{background:var(--bad)}button.wide{width:100%;padding:12px}
+.in,select{width:100%;padding:11px;border:1.5px solid #cfd3e6;border-radius:10px;font:inherit;margin:4px 0;background:#fff}
+.mut,small{color:var(--mut);display:block}
+.top{display:flex;justify-content:space-between;align-items:center;margin-bottom:10px}
+.who{display:flex;gap:10px;align-items:center}
+.av{width:46px;height:46px;border-radius:50%;object-fit:cover;background:var(--acc);display:grid;place-items:center;font-weight:700;font-size:20px}
+.bell{position:relative;background:#fff;color:var(--ink);font-size:20px}
+.bell i,nav i{position:absolute;top:2px;right:2px;width:10px;height:10px;border-radius:50%;background:var(--bad)}
+.ad{margin:12px 0;border-radius:14px;overflow:hidden;background:var(--ink);color:#fff;min-height:70px}
+.ad img{width:100%;aspect-ratio:16/9;object-fit:cover;display:block}.ad p{margin:0;padding:14px;font-weight:600}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.sub{background:#fff;color:var(--ink);padding:18px 8px;font-weight:700;border:2px solid var(--pri);border-radius:14px}
+.sub span{display:block;font-size:28px}
+.item,.box{background:#fff;border-radius:12px;padding:12px;margin:8px 0;display:flex;justify-content:space-between;gap:8px;align-items:center}
+.box{display:block}.item b,.item small{display:block}
+.dot{display:inline-block;width:11px;height:11px;border-radius:50%;margin-right:6px}.dot.on{background:#2563eb}.dot.off{background:#f2c200}
+nav{position:fixed;bottom:0;left:0;right:0;background:#fff;display:flex;border-top:1px solid #dde0ee;padding-bottom:env(safe-area-inset-bottom)}
+nav button{flex:1;background:none;color:var(--ink);font-size:11px;position:relative;border-radius:0}nav button span{display:block;font-size:20px}
+.msgs{height:60vh;overflow:auto;display:flex;flex-direction:column;gap:6px}
+.m{max-width:80%;background:#fff;padding:8px 12px;border-radius:12px;align-self:flex-start}.m.mine{background:var(--acc);align-self:flex-end}.m img{max-width:100%;border-radius:8px;display:block}
+.send{display:flex;gap:4px;align-items:center}.clip{font-size:24px}
+.pdf{width:100%;height:80vh;border:0}.full{width:100%}
+.tabs{display:flex;gap:4px;overflow:auto}.tabs button{background:#fff;color:var(--ink)}.tabs .on{background:var(--acc)}
+.auth{max-width:420px;margin:auto;padding:24px 18px}.auth h1{margin:0}
+#toast{position:fixed;left:50%;bottom:90px;transform:translateX(-50%);background:var(--ink);color:#fff;padding:10px 16px;border-radius:20px;opacity:0;pointer-events:none;transition:.2s;z-index:9}#toast.show{opacity:1}
+.opt{display:block;padding:8px 4px}.bar{position:relative;background:#e6e9f5;border-radius:10px;margin:6px 0;overflow:hidden}.bar i{position:absolute;inset:0 auto 0 0;background:var(--acc);opacity:.6}.bar span{position:relative;display:block;padding:9px 12px}</style></head><body>
+<div id="app"></div><div id="toast"></div>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+<script>
+const firebaseConfig={apiKey:"AIzaSyC-3kRgajfCUqxlzTy01kOBb03t6Vkzb3w",authDomain:"pd-learning.firebaseapp.com",projectId:"pd-learning",storageBucket:"pd-learning.firebasestorage.app",messagingSenderId:"327964732146",appId:"1:327964732146:web:145878c88e7cad2b193e6b"};
+const ADMIN_EMAIL="parthadasofficialuse@gmail.com";
+firebase.initializeApp(firebaseConfig);
+const auth=firebase.auth(),db=firebase.firestore();
+const CLASSES=[6,7,8,9,10,11,12],SUBJECTS=[["ENGLISH","📘"],["MATHS","➗"],["GRAMMAR","📖"],["PDF NOTES","📚"],["SCIENCE","🔬"],["PRACTICAL","🧪"]];
+let me=null,isAdmin=false,started=false,registering=false,deleting=false,pendingName=null;
+let unsubs=[],vun=[],stack=[],cur=null,curArg=null,adsTimer,beat,tick,content=[],notices=[],ads=[],chatNew=false,atab="students",ulist=[];
+const V={},A={};
+const $=s=>document.querySelector(s);
+const esc=s=>String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const toast=m=>{const t=$("#toast");t.textContent=m;t.className="show";setTimeout(()=>t.className="",2600)};
+const fake=p=>p.replace(/\D/g,"")+"@pdlearning.app";
+const opts=a=>a.map(x=>`<option>${x}</option>`).join("");
+const driveId=u=>(u.match(/drive\.google\.com\/(?:file\/d\/|open\?id=|uc\?.*?id=)([\w-]+)/)||[])[1];
+function shrink(f,max,q){return new Promise(r=>{const i=new Image();i.onload=()=>{const k=Math.min(1,max/Math.max(i.width,i.height)),c=document.createElement("canvas");c.width=i.width*k;c.height=i.height*k;c.getContext("2d").drawImage(i,0,0,c.width,c.height);r(c.toDataURL("image/jpeg",q))};i.src=URL.createObjectURL(f)})}
+
+/* ---------- navigation ---------- */
+function go(n,a,push=true){if(push&&cur&&cur!=="auth")stack.push([cur,curArg]);cur=n;curArg=a;vun.forEach(f=>f());vun=[];clearInterval(tick);V[n](a);scrollTo(0,0)}
+function back(){const p=stack.pop();if(p)go(p[0],p[1],false)}
+function goHome(){stack=[];go(isAdmin?"admin":"home",null,false)}
+function shell(title,body,nav=true){
+ $("#app").innerHTML=`<header>${stack.length?`<button onclick="back()">←</button>`:""}<b>${title}</b><button onclick="goHome()">🏠</button></header><main>${body}</main>`+(nav&&!isAdmin?
+ `<nav>${[["🏠","Home","goHome()"],["⬇️","Downloads","go('downloads')"],["🔔","Alerts","go('notifs')"],["💬","Ask Teacher","go('chat')"],["👤","Profile","go('profile')"]].map(x=>`<button onclick="${x[2]}"><span>${x[0]}</span>${x[1]}${x[1]==="Ask Teacher"&&chatNew?"<i></i>":""}</button>`).join("")}</nav>`:"")}
+
+/* ---------- auth ---------- */
+function showAuth(mode){cur="auth";stack=[];const f=(id,l,t="text")=>`<label>${l}<input id="${id}" class="in" type="${t}"></label>`;
+ $("#app").innerHTML=`<div class="auth"><h1>PD Learning Hub</h1><p class="mut">by Partha Das</p>`+
+ (mode==="login"?f("n","Full name")+f("p","Phone number","tel")+f("w","Password","password")+`<button class="wide" onclick="doLogin()">Login</button><p><a href="#" onclick="showAuth('reg')">New student? Register</a></p><p><a href="#" onclick="showAuth('admin')">Admin login</a></p>`:
+ mode==="admin"?f("ae","Admin email","email")+f("aw","Password","password")+`<button class="wide" onclick="doAdmin()">Open admin panel</button><p><a href="#" onclick="showAuth('login')">Student login</a></p>`:
+ f("rn","Full name")+f("rp","Phone number","tel")+`<label>Class<select id="rc">${opts(CLASSES)}</select></label>`+f("rs","School name")+f("rd","District")+f("rb","Date of birth","date")+f("rw","Password (6+ characters)","password")+f("rx","Confirm password","password")+`<button class="wide" onclick="doReg()">Create account</button><p><a href="#" onclick="showAuth('login')">I already have an account</a></p>`)+`</div>`}
+async function doLogin(){const n=$("#n").value.trim(),p=$("#p").value,w=$("#w").value;if(!n||!p||!w)return toast("Fill in all fields");pendingName=n.toLowerCase();try{await auth.signInWithEmailAndPassword(fake(p),w)}catch(e){pendingName=null;toast("Wrong phone number or password")}}
+async function doAdmin(){try{await auth.signInWithEmailAndPassword($("#ae").value.trim(),$("#aw").value)}catch(e){toast("Wrong admin email or password")}}
+async function doReg(){const g=i=>$("#"+i).value.trim();const d={name:g("rn"),phone:g("rp").replace(/\D/g,""),cls:+g("rc"),school:g("rs"),district:g("rd"),dob:g("rb"),status:"active",created:Date.now()};const w=$("#rw").value;
+ if(!d.name||!d.school||!d.district||!d.dob)return toast("Fill in all fields");if(d.phone.length!==10)return toast("Enter a 10 digit phone number");if(w.length<6)return toast("Password needs 6+ characters");if(w!==$("#rx").value)return toast("Passwords do not match");
+ registering=true;try{const c=await auth.createUserWithEmailAndPassword(fake(d.phone),w);await db.collection("users").doc(c.user.uid).set(d)}catch(e){toast(e.code==="auth/email-already-in-use"?"This phone number is already registered":"Could not register: "+e.code);try{await auth.currentUser?.delete()}catch(_){}}registering=false}
+async function logout(){if(me)try{await db.collection("users").doc(me.id).update({online:false,lastSeen:Date.now()})}catch(e){}auth.signOut()}
+function exitApp(){logout();setTimeout(()=>{window.close();toast("Press your phone's Home button to exit")},400)}
+function kick(m){auth.signOut().then(()=>toast(m))}
+function clean(){unsubs.forEach(f=>f());unsubs=[];vun.forEach(f=>f());vun=[];clearInterval(beat);clearInterval(adsTimer);clearInterval(tick);started=false;stack=[];content=[];notices=[];ads=[]}
+
+auth.onAuthStateChanged(u=>{clean();
+ if(!u){me=null;isAdmin=false;return showAuth("login")}
+ if(u.email===ADMIN_EMAIL){isAdmin=true;return go("admin",null,false)}
+ isAdmin=false;const ref=db.collection("users").doc(u.uid);
+ unsubs.push(ref.onSnapshot(s=>{
+  if(!s.exists){if(!registering&&!deleting)kick("Your account was removed by the admin");return}
+  me={id:u.uid,...s.data()};
+  if(me.status==="blocked")return kick("Your account is blocked by the admin");
+  if(pendingName&&pendingName!==me.name.toLowerCase()){pendingName=null;return kick("Name does not match this account")}
+  pendingName=null;
+  if(!started){started=true;startData();startPresence(ref);go("home",null,false)}
+ },()=>{}))});
+
+function startPresence(ref){const set=o=>ref.update({online:o,lastSeen:Date.now()}).catch(()=>{});set(true);beat=setInterval(()=>{if(!document.hidden)set(true)},30000);
+ document.onvisibilitychange=()=>set(!document.hidden);window.onpagehide=()=>set(false)}
+function startData(){
+ unsubs.push(db.collection("content").where("cls","==",me.cls).onSnapshot(s=>{content=s.docs.map(d=>({id:d.id,...d.data()})).filter(c=>!c.hidden);if(cur==="subject")go("subject",curArg,false)},()=>{}));
+ unsubs.push(db.collection("notices").orderBy("created","desc").limit(30).onSnapshot(s=>{notices=s.docs.map(d=>({id:d.id,...d.data()}));updateBadge()},()=>{}));
+ unsubs.push(db.collection("ads").onSnapshot(s=>{ads=s.docs.map(d=>d.data());if(cur==="home")drawAd()},()=>{}));
+ unsubs.push(db.collection("chats").doc(me.id).onSnapshot(s=>{const t=s.data()?.adminTs||0;chatNew=t>(+localStorage.pdl_chat||0)&&cur!=="chat";if(chatNew)toast("New reply from your teacher")},()=>{}))}
+function updateBadge(){const n=notices.filter(x=>x.created>(+localStorage.pdl_seen||0)).length;const b=$("#badge");if(b)b.hidden=!n}
+function drawAd(){clearInterval(adsTimer);const box=$("#ad");if(!box)return;const L=ads.filter(a=>a.expires>Date.now());if(!L.length){box.innerHTML="";return}let i=0;
+ const p=()=>{const a=L[i++%L.length];box.innerHTML=`<div class="ad" data-l="${esc(a.link)}" onclick="if(this.dataset.l)open(this.dataset.l,'_blank')">${a.img?`<img src="${esc(a.img)}">`:""}${a.text?`<p>${esc(a.text)}</p>`:""}</div>`};p();adsTimer=setInterval(p,4000)}
+
+/* ---------- student views ---------- */
+const avatar=u=>u.photo?`<img class="av" src="${u.photo}">`:`<div class="av">${esc((u.name||"?")[0])}</div>`;
+function items(list){if(!list.length)return `<p class="mut">Nothing here yet. New material will appear automatically.</p>`;
+ return list.map(c=>`<div class="item"><div><b>${esc(c.title)}</b><small>${esc(c.chapter||"")} (${c.type})</small></div><div>${c.canView===false?"🔒":`<button onclick="openItem('${c.id}')">View</button>`}${c.canDownload===false?"":`<button class="alt" onclick="dl('${c.id}')">Save</button>`}</div></div>`).join("")}
+function openItem(id){go("viewer",content.find(x=>x.id===id))}
+function dl(id){const c=content.find(x=>x.id===id),g=driveId(c.url),url=g?`https://drive.google.com/uc?export=download&id=${g}`:c.url;
+ const L=JSON.parse(localStorage.pdl_dl||"[]");if(!L.some(x=>x.id===id))L.push({id,title:c.title,type:c.type,url:c.url});localStorage.pdl_dl=JSON.stringify(L);
+ const a=document.createElement("a");a.href=url;a.download=c.title;a.target="_blank";a.click();toast("Saved to Downloads")}
+V.home=()=>{shell("PD Learning Hub",`<div class="top"><div class="who" onclick="go('profile')">${avatar(me)}<div><small>Welcome</small><b>${esc(me.name)}</b><small>Class ${me.cls}</small></div></div><button class="bell" onclick="go('notifs')">🔔<i id="badge" hidden></i></button></div>
+ <input class="in" placeholder="Search notes or subjects" onkeydown="if(event.key==='Enter')go('search',this.value)"><div id="ad"></div>
+ <h3>Class ${me.cls} study material</h3><div class="grid">${SUBJECTS.map(([n,i])=>`<button class="sub" onclick="go('subject','${n}')"><span>${i}</span>${n}</button>`).join("")}</div><div class="grid" style="margin-top:10px"><button class="sub" onclick="go('quizzes')"><span>📝</span>MCQ TEST</button><button class="sub" onclick="go('polls')"><span>📊</span>POLL</button></div>`);drawAd();updateBadge()};
+V.subject=n=>shell(n,items(content.filter(c=>c.subject===n)));
+V.search=q=>{q=(q||"").toLowerCase();shell("Search",`<input class="in" value="${esc(q)}" onkeydown="if(event.key==='Enter')go('search',this.value,false)">`+items(content.filter(c=>(c.title+(c.chapter||"")+c.subject).toLowerCase().includes(q))))};
+V.viewer=c=>{const g=driveId(c.url);shell(esc(c.title),c.type==="Photo"?`<img class="full" src="${esc(g?`https://drive.google.com/uc?id=${g}`:c.url)}">`:`<iframe class="pdf" src="${esc(g?`https://drive.google.com/file/d/${g}/preview`:c.url)}"></iframe>`,false)};
+V.downloads=()=>{const L=JSON.parse(localStorage.pdl_dl||"[]");shell("Downloads",L.length?L.map((c,i)=>`<div class="item"><div><b>${esc(c.title)}</b><small>${c.type}</small></div><div><button onclick="go('viewer',JSON.parse(localStorage.pdl_dl)[${i}])">Open</button><button class="bad" onclick="rmDl(${i})">✕</button></div></div>`).join(""):`<p class="mut">Files you save will be listed here.</p>`)};
+function rmDl(i){const L=JSON.parse(localStorage.pdl_dl||"[]");L.splice(i,1);localStorage.pdl_dl=JSON.stringify(L);go("downloads",0,false)}
+V.notifs=()=>{localStorage.pdl_seen=Date.now();shell("Notifications",notices.length?notices.map(n=>`<div class="box"><b>${esc(n.title)}</b><small>${new Date(n.created).toLocaleString()}</small>${esc(n.msg)}</div>`).join(""):`<p class="mut">No notifications yet.</p>`)};
+V.profile=()=>{shell("My Profile",`<div class="box" style="text-align:center">${avatar(me)}<br><label class="mut">Change photo<input type="file" accept="image/*" hidden onchange="setPhoto(this)"> 📷</label>
+ <h3>${esc(me.name)}</h3><small>Phone: ${esc(me.phone)}</small><small>Class ${me.cls}</small><small>${esc(me.school)}</small><small>${esc(me.district)}</small></div>
+ <button class="wide" onclick="logout()">Logout</button><button class="wide alt" onclick="exitApp()">Exit app</button><button class="wide bad" onclick="delAcc()">Delete my account</button>`)};
+async function setPhoto(i){if(!i.files[0])return;await db.collection("users").doc(me.id).update({photo:await shrink(i.files[0],160,.7)});go("profile",0,false)}
+async function delAcc(){if(!confirm("Delete your account permanently?"))return;deleting=true;try{const u=auth.currentUser;await db.collection("users").doc(u.uid).delete();await u.delete()}catch(e){toast("Log out, log in again, then retry")}deleting=false;auth.signOut()}
+
+/* ---------- chat (student and admin) ---------- */
+V.chat=a=>{const uid=isAdmin?a.id:me.id;chatNew=false;
+ shell(isAdmin?esc(a.name):"Ask Teacher",`<div id="msgs" class="msgs"></div><div class="send"><label class="clip">📷<input type="file" accept="image/*" hidden onchange="sendImg(this,'${uid}')"></label><input id="mt" class="in" placeholder="Type a message" onkeydown="if(event.key==='Enter')sendMsg('${uid}')"><button onclick="sendMsg('${uid}')">Send</button></div>`);
+ const who=isAdmin?"a":"s";
+ vun.push(db.collection("chats").doc(uid).collection("msgs").orderBy("ts").onSnapshot(s=>{const b=$("#msgs");if(!b)return;b.innerHTML=s.docs.map(d=>{const m=d.data();return `<div class="m ${m.from===who?"mine":""}">${m.img?`<img src="${m.img}">`:""}${esc(m.text||"")}</div>`}).join("");b.scrollTop=b.scrollHeight;if(!isAdmin)localStorage.pdl_chat=Date.now()}))};
+async function post(uid,o){const t=Date.now();await db.collection("chats").doc(uid).collection("msgs").add({from:isAdmin?"a":"s",ts:t,...o});
+ await db.collection("chats").doc(uid).set(isAdmin?{adminTs:t}:{name:me.name,studentTs:t,last:o.text||"Photo"},{merge:true})}
+async function sendMsg(uid){const i=$("#mt"),t=i.value.trim();if(!t)return;i.value="";await post(uid,{text:t})}
+async function sendImg(i,uid){if(i.files[0])await post(uid,{img:await shrink(i.files[0],800,.6)})}
+
+/* ---------- admin ---------- */
+V.admin=()=>{shell("Admin Panel",`<div class="tabs">${["students","content","mcq","polls","notify","ads"].map(t=>`<button class="${t===atab?"on":""}" onclick="atab='${t}';go('admin',0,false)">${t==="mcq"?"MCQ":t[0].toUpperCase()+t.slice(1)}</button>`).join("")}</div><div id="ab"></div><button class="wide alt" onclick="logout()">Logout</button>`);A[atab]()};
+A.students=()=>{const draw=()=>{const on=u=>u.online&&Date.now()-u.lastSeen<90000;$("#ab").innerHTML=`<p>${ulist.length} students, ${ulist.filter(on).length} online</p>`+ulist.map(u=>`<div class="item"><div><span class="dot ${on(u)?"on":"off"}"></span><b>${esc(u.name)}</b><small>Class ${u.cls}, ${esc(u.school)}, ${esc(u.district)}</small><small>${esc(u.phone)} (${u.status})</small></div><div><button onclick="chatWith('${u.id}')">Chat</button><button class="alt" onclick="setStatus('${u.id}','${u.status==="blocked"?"active":"blocked"}')">${u.status==="blocked"?"Unblock":"Block"}</button><button class="bad" onclick="rmUser('${u.id}')">Remove</button></div></div>`).join("")};
+ vun.push(db.collection("users").onSnapshot(s=>{ulist=s.docs.map(d=>({id:d.id,...d.data()}));draw()}));tick=setInterval(()=>{if(cur==="admin"&&atab==="students"&&$("#ab"))draw()},30000)};
+const chatWith=id=>go("chat",ulist.find(u=>u.id===id));
+const setStatus=(id,s)=>db.collection("users").doc(id).update({status:s});
+const rmUser=id=>confirm("Remove this student?")&&db.collection("users").doc(id).delete();
+A.content=()=>{$("#ab").innerHTML=`<div class="box"><select id="cc">${opts(CLASSES)}</select><select id="cs">${opts(SUBJECTS.map(s=>s[0]))}</select><input id="ch" class="in" placeholder="Chapter name"><input id="ct" class="in" placeholder="Title"><input id="cu" class="in" placeholder="File link (Google Drive / Cloudinary)"><select id="cy">${opts(["PDF","Photo"])}</select>
+ <label><input type="checkbox" id="cv" checked> Students can view</label><br><label><input type="checkbox" id="cd" checked> Students can download</label><button class="wide" onclick="addContent()">Add material</button></div><div id="cl"></div>`;
+ vun.push(db.collection("content").orderBy("created","desc").onSnapshot(s=>{$("#cl").innerHTML=s.docs.map(d=>{const c=d.data(),id=d.id;return `<div class="item"><div><b>${esc(c.title)}</b><small>Class ${c.cls}, ${c.subject}, ${esc(c.chapter||"")}</small><small>${c.hidden?"Hidden. ":""}${c.canView===false?"View locked. ":""}${c.canDownload===false?"Download locked.":""}</small></div><div><button onclick="upd('${id}',{hidden:${!c.hidden}})">${c.hidden?"Show":"Hide"}</button><button onclick="upd('${id}',{canView:${c.canView===false}})">View</button><button onclick="upd('${id}',{canDownload:${c.canDownload===false}})">Save</button><button class="bad" onclick="del('content','${id}')">✕</button></div></div>`}).join("")}))};
+const upd=(id,o)=>db.collection("content").doc(id).update(o);
+const del=(c,id)=>confirm("Delete this?")&&db.collection(c).doc(id).delete();
+async function addContent(){const g=i=>$("#"+i).value.trim(),d={cls:+g("cc"),subject:g("cs"),chapter:g("ch"),title:g("ct"),url:g("cu"),type:g("cy"),canView:$("#cv").checked,canDownload:$("#cd").checked,hidden:false,created:Date.now()};
+ if(!d.title||!d.url)return toast("Title and link are required");await db.collection("content").add(d);await db.collection("notices").add({title:"New material added",msg:`Class ${d.cls} ${d.subject}: ${d.title}`,created:Date.now()});toast("Added. Students will see it now")}
+A.notify=()=>{$("#ab").innerHTML=`<div class="box"><input id="nt" class="in" placeholder="Title"><textarea id="nm" class="in" rows="3" placeholder="Message"></textarea><button class="wide" onclick="sendNotice()">Send notification</button></div><div id="nl"></div>`;
+ vun.push(db.collection("notices").orderBy("created","desc").limit(20).onSnapshot(s=>{$("#nl").innerHTML=s.docs.map(d=>`<div class="item"><div><b>${esc(d.data().title)}</b><small>${esc(d.data().msg)}</small></div><button class="bad" onclick="del('notices','${d.id}')">✕</button></div>`).join("")}))};
+async function sendNotice(){const t=$("#nt").value.trim(),m=$("#nm").value.trim();if(!t)return toast("Add a title");await db.collection("notices").add({title:t,msg:m,created:Date.now()});$("#nt").value=$("#nm").value="";toast("Sent")}
+A.ads=()=>{$("#ab").innerHTML=`<div class="box"><input id="ai" class="in" placeholder="Banner image link (optional)"><input id="at" class="in" placeholder="Banner text (optional)"><input id="al" class="in" placeholder="Link when tapped (optional)"><input id="ad" class="in" type="number" placeholder="Days to show" value="7"><button class="wide" onclick="addAd()">Publish banner</button></div><div id="al2"></div>`;
+ vun.push(db.collection("ads").onSnapshot(s=>{$("#al2").innerHTML=s.docs.map(d=>{const a=d.data();return `<div class="item"><div><b>${esc(a.text||"Image banner")}</b><small>Ends ${new Date(a.expires).toLocaleDateString()}</small></div><button class="bad" onclick="del('ads','${d.id}')">✕</button></div>`}).join("")}))};
+async function addAd(){const g=i=>$("#"+i).value.trim();if(!g("ai")&&!g("at"))return toast("Add an image or text");await db.collection("ads").add({img:g("ai"),text:g("at"),link:g("al"),expires:Date.now()+(+g("ad")||7)*864e5,created:Date.now()});toast("Banner published")}
+
+/* ---------- MCQ tests (student) ---------- */
+let quizzes=[],qz=null,qAns=[],qEnd=0;
+V.quizzes=()=>{shell("MCQ Test",`<div id="ql"><p class="mut">Loading...</p></div><button class="wide alt" onclick="go('history')">My results</button>`);
+ vun.push(db.collection("quizzes").where("cls","==",me.cls).onSnapshot(s=>{const b=$("#ql");if(!b)return;quizzes=s.docs.map(d=>({id:d.id,...d.data()}));
+  b.innerHTML=quizzes.length?quizzes.map(q=>`<div class="item"><div><b>${esc(q.title)}</b><small>${esc(q.subject)}, ${q.qs.length} questions, ${q.minutes} min</small></div><button onclick="startQuiz('${q.id}')">Start</button></div>`).join(""):`<p class="mut">No tests for your class yet.</p>`}))};
+function startQuiz(id){qz=quizzes.find(x=>x.id===id);qAns=qz.qs.map(()=>-1);qEnd=Date.now()+qz.minutes*60000;go("quiz")}
+V.quiz=()=>{shell(esc(qz.title),`<div class="box"><b id="tm"></b> left. Answer all questions, then submit.</div>`+qz.qs.map((q,i)=>`<div class="box"><b>${i+1}. ${esc(q.q)}</b>${q.o.map((o,j)=>`<label class="opt"><input type="radio" name="q${i}" onchange="qAns[${i}]=${j}"> ${esc(o)}</label>`).join("")}</div>`).join("")+`<button class="wide" onclick="submitQuiz()">Submit test</button>`,false);
+ const t=()=>{const s=Math.max(0,Math.round((qEnd-Date.now())/1000)),e=$("#tm");if(e)e.textContent=Math.floor(s/60)+":"+String(s%60).padStart(2,"0");if(!s)submitQuiz()};t();tick=setInterval(t,1000)};
+async function submitQuiz(){clearInterval(tick);const score=qz.qs.filter((q,i)=>qAns[i]===q.a).length;
+ const r={uid:me.id,name:me.name,quizId:qz.id,title:qz.title,score,total:qz.qs.length,ts:Date.now()};
+ try{await db.collection("results").add(r)}catch(e){toast("Could not save result")}go("score",{r,ans:qAns.slice(),qz},false)}
+V.score=({r,ans,qz})=>shell("Result",`<div class="box" style="text-align:center"><h2>${r.score} / ${r.total}</h2><p>${Math.round(r.score*100/r.total)}%</p></div>`+qz.qs.map((q,i)=>`<div class="box"><b>${i+1}. ${esc(q.q)}</b><small>Your answer: ${ans[i]<0?"Not answered":esc(q.o[ans[i]])}</small><small style="color:${ans[i]===q.a?"var(--ok)":"var(--bad)"}">Correct answer: ${esc(q.o[q.a])}</small></div>`).join(""),false);
+V.history=()=>{shell("My results",`<div id="hl"></div>`);
+ vun.push(db.collection("results").where("uid","==",me.id).onSnapshot(s=>{const b=$("#hl");if(!b)return;const L=s.docs.map(d=>d.data()).sort((a,b)=>b.ts-a.ts);
+  b.innerHTML=L.length?L.map(r=>`<div class="item"><div><b>${esc(r.title)}</b><small>${new Date(r.ts).toLocaleString()}</small></div><b>${r.score}/${r.total}</b></div>`).join(""):`<p class="mut">No tests taken yet.</p>`}))};
+
+/* ---------- Polls ---------- */
+let pollList=[],voteList=[];
+function pollHtml(p,adm){const v=voteList.filter(x=>x.pollId===p.id),mine=adm?null:v.find(x=>x.uid===me.id),show=adm||mine||p.closed;
+ return `<div class="box"><b>${esc(p.q)}</b>${p.closed?"<small>Poll closed</small>":""}`+p.o.map((o,i)=>{const n=v.filter(x=>x.choice===i).length,pc=v.length?Math.round(n*100/v.length):0;
+  return show?`<div class="bar"><i style="width:${pc}%"></i><span>${esc(o)} (${n}, ${pc}%)${mine&&mine.choice===i?" ✓":""}</span></div>`:`<button class="wide alt" onclick="castVote('${p.id}',${i})">${esc(o)}</button>`}).join("")+`<small>${v.length} votes</small>`+
+  (adm?`<button onclick="db.collection('polls').doc('${p.id}').update({closed:${!p.closed}})">${p.closed?"Reopen":"Close"}</button><button class="bad" onclick="del('polls','${p.id}')">Delete</button>`:"")+`</div>`}
+function watchPolls(id,adm){vun.push(db.collection("polls").orderBy("created","desc").limit(10).onSnapshot(s=>{pollList=s.docs.map(d=>({id:d.id,...d.data()}));drawPolls(id,adm)}));
+ vun.push(db.collection("votes").onSnapshot(s=>{voteList=s.docs.map(d=>d.data());drawPolls(id,adm)}))}
+function drawPolls(id,adm){const b=$("#"+id);if(b)b.innerHTML=pollList.length?pollList.map(p=>pollHtml(p,adm)).join(""):`<p class="mut">No polls yet.</p>`}
+V.polls=()=>{shell("Polls",`<div id="pl"></div>`);watchPolls("pl",false)};
+async function castVote(pid,i){try{await db.collection("votes").doc(pid+"_"+me.id).set({pollId:pid,uid:me.id,choice:i});toast("Vote saved")}catch(e){toast("You already voted")}}
+
+/* ---------- Admin: MCQ and Polls ---------- */
+A.mcq=()=>{$("#ab").innerHTML=`<div class="box"><input id="qn" class="in" placeholder="Test title"><select id="qc">${opts(CLASSES)}</select><select id="qs">${opts(SUBJECTS.map(s=>s[0]))}</select><input id="qm" class="in" type="number" placeholder="Time in minutes" value="10">
+ <textarea id="qt" class="in" rows="6" placeholder="One question per line:&#10;Question | Option 1 | Option 2 | Option 3 | Option 4 | Correct option number&#10;Capital of Assam? | Guwahati | Dispur | Jorhat | Tezpur | 2"></textarea><button class="wide" onclick="addQuiz()">Publish test</button></div><h3>Tests</h3><div id="qa"></div><h3>Student results</h3><div id="qr"></div>`;
+ vun.push(db.collection("quizzes").orderBy("created","desc").onSnapshot(s=>{$("#qa").innerHTML=s.docs.map(d=>{const q=d.data();return `<div class="item"><div><b>${esc(q.title)}</b><small>Class ${q.cls}, ${esc(q.subject)}, ${q.qs.length} questions</small></div><button class="bad" onclick="del('quizzes','${d.id}')">✕</button></div>`}).join("")}));
+ vun.push(db.collection("results").orderBy("ts","desc").limit(40).onSnapshot(s=>{$("#qr").innerHTML=s.docs.map(d=>{const r=d.data();return `<div class="item"><div><b>${esc(r.name)}</b><small>${esc(r.title)}</small></div><b>${r.score}/${r.total}</b></div>`}).join("")||`<p class="mut">No results yet.</p>`}))};
+async function addQuiz(){const g=i=>$("#"+i).value.trim();
+ const qs=g("qt").split("\n").map(l=>l.split("|").map(x=>x.trim())).filter(p=>p.length>=4).map(p=>({q:p[0],o:p.slice(1,-1),a:+p[p.length-1]-1}));
+ if(!g("qn")||!qs.length)return toast("Add a title and at least one valid question");
+ if(qs.some(x=>!(x.a>=0&&x.a<x.o.length)))return toast("Check the correct option numbers");
+ await db.collection("quizzes").add({title:g("qn"),cls:+g("qc"),subject:g("qs"),minutes:+g("qm")||10,qs,created:Date.now()});
+ await db.collection("notices").add({title:"New MCQ test",msg:`Class ${g("qc")} ${g("qs")}: ${g("qn")}`,created:Date.now()});$("#qt").value="";toast("Test published")}
+A.polls=()=>{$("#ab").innerHTML=`<div class="box"><input id="pq" class="in" placeholder="Poll question"><textarea id="po" class="in" rows="4" placeholder="One option per line (2 to 6)"></textarea><button class="wide" onclick="addPoll()">Publish poll</button></div><div id="pa"></div>`;watchPolls("pa",true)};
+async function addPoll(){const q=$("#pq").value.trim(),o=$("#po").value.split("\n").map(x=>x.trim()).filter(Boolean).slice(0,6);if(!q||o.length<2)return toast("Add a question and 2+ options");
+ await db.collection("polls").add({q,o,closed:false,created:Date.now()});await db.collection("notices").add({title:"New poll",msg:q,created:Date.now()});$("#pq").value=$("#po").value="";toast("Poll published")}
+</script></body></html>
